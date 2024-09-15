@@ -7,22 +7,37 @@ set all other high frequencies to 0.
 (c) Reconstruct the original image (ifft2) by using the new generated frequencies in step (b).
 
 """
+# Steps: 
+""" 
+1. Modify lenaNoise to only require cv2 to procdess images rather than NP. 
+2. Organize Mentally Importance behind shifting the 2d fourier transfoorm into the center
+    image - what amn I looking at why is ti important? 
+    - why are negative signals important? why are positive signals important? df - exploration of the specific signals.
+    - phase - how can certain mathematical concepts help to determine what "waves" are present in the function and their phases?
+    - real components
+3. Implement a backbone implementation of the total variation code
+4. Organize a Report Detailing relevant subscriptions.
 
+
+"""
 
 # Import the image using pil and parse it using a np array.
 
-from PIL import Image
+import cv2
 import numpy as np
 
 import matplotlib.pyplot as plt
 
 
 
-img = Image.open("lenaNoise.png")
-img.convert('L')
+img = cv2.imread("lenaNoise.png", cv2.IMREAD_GRAYSCALE)
+
 
 array = np.array(img)
 frequencies = np.fft.fft2(img)
+
+
+
 
 
 # Compute magnitude spectrum (log scale for better visualization)
