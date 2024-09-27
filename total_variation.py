@@ -7,27 +7,43 @@ Total Variation Algorithm - An algorithm designed to iteratively denoise an imag
 # Create a method for generating noisy images using gaussian added noise.
 # Create an algorithm that iteratively denoises an image using total variation.
 # Implement * note for any other details of importance in the how part.
+# DF: Investigate what Problems in bad gradient calculations may have when calcualting gradients, and if the gradients are valid 
 
 import numpy as np
 from PIL import Image
 import cv2
+from itertools import product
+import pdb
+        
 
 import matplotlib.pyplot as plt
+from matplotlib import gridspec
 
-def add_gaussian_noise(image, mean=0, sigma=25):
-    # Convert PIL image to NumPy array
-    img_array = np.array(image)
+def add_gaussian_noise_normalize(image, mean=0, sigma=0.1):
+    """ 
+    Add random gaussian noise and normalize image values frmo cv2
+    """
+
+
+
+    #img_array = np.array(image)
+
+    image = image.astype(float) / 255.0
+
+    
     
 
-    noise = np.random.normal(mean, sigma, img_array.shape)
+    noise = np.random.normal(mean, sigma, image.shape)
     
-    noisy_img_array = img_array + noise
-    noisy_img_array = np.clip(noisy_img_array, 0, 255).astype(np.uint8)
+    noisy_img_array = image + noise
+    noisy_img_array = np.clip(noisy_img_array, 0, 1).astype(np.float64)
+
+    
     
  
-    noisy_img = Image.fromarray(noisy_img_array)
+    #noisy_img = Image.fromarray(noisy_img_array)
     
-    return noisy_img
+    return noisy_img_array
 
 
 # TODO: Collet relevant information needed to implement gradient descent image denoising task.
@@ -40,8 +56,9 @@ class ImageEvaluator:
     l - lambda term - adjustable parameter for assigning significance for Data Fidelity Term
     
     """
-    def __init__(self, f_image, l = 0.1): 
+    def __init__(self, f_image, l = 5, learning_rate = 0.01): 
         self.l = l
+        self.learning_rate = learning_rate
         self.f_image = np.array(f_image)
 
         # When Calculating loss store the most recently used u_image
@@ -56,6 +73,10 @@ class ImageEvaluator:
         u_image = np.array(u_image)
 
         self.u_image = u_image
+
+
+
+
         return self.l * self.squared_l2_norm(self.f_image, u_image) + self.calculate_sum_gradients(u_image)
     
     def backward(self): 
@@ -73,6 +94,8 @@ class ImageEvaluator:
         # originall cost function - cost = (u - f)^2 --> gradient = 2 *(u - f)
         data_fidelity_gradient = self.l * 2 * (self.u_image - self.f_image)
 
+        
+
         # add the changs that result in the calcuations to the sum_gradients - in particular changing the central differences for surrounding pixels
         # upper? lower? left? right?
 
@@ -86,7 +109,7 @@ class ImageEvaluator:
 
         grad_x, grad_y = ImageEvaluator.calculate_gradient(self.u_image)
 
-
+        
 
 
         for i in range(self.u_image.shape[0]):
@@ -118,8 +141,11 @@ class ImageEvaluator:
 
                     # keep unsimplified to ensure proper computation
 
-            
-                    left_gradient = 0.5 * (x_gradient ** 2 + y_gradient **2) ** -0.5 * 2 * x_gradient * x_gradient_derivative
+                    #if x_gradient + y_gradient == 0: 
+                        #pdb.set_trace()
+
+                
+                    left_gradient = 0.5 * (x_gradient ** 2 + y_gradient **2 + 1e-8) ** -0.5 * 2 * x_gradient * x_gradient_derivative
 
 
                 if use_right_gradient:
@@ -129,7 +155,7 @@ class ImageEvaluator:
                     y_gradient = grad_y[i][j + 1]#(self.u_image[i + 1][j + 1] - self.u_image[i - 1][j + 1])
 
                     # keep unsimplified to ensure proper computation
-                    right_gradient = 0.5 * (x_gradient ** 2 + y_gradient **2) ** -0.5 * 2 * x_gradient * x_gradient_derivative
+                    right_gradient = 0.5 * (x_gradient ** 2 + y_gradient **2 + 1e-8) ** -0.5 * 2 * x_gradient * x_gradient_derivative
 
                 if use_bottom_gradient:
                     # Bottom 
@@ -141,7 +167,7 @@ class ImageEvaluator:
                     y_gradient_derivative = 0.5
 
                     # keep unsimplified to ensure proper computation
-                    bottom_gradient = 0.5 * (x_gradient ** 2 + y_gradient **2) ** -0.5 * 2 * y_gradient * y_gradient_derivative
+                    bottom_gradient = 0.5 * (x_gradient ** 2 + y_gradient **2 + 1e-8) ** -0.5 * 2 * y_gradient * y_gradient_derivative
 
                 if use_top_gradient:
                     # Top  (assuming going down is top)
@@ -152,7 +178,7 @@ class ImageEvaluator:
                     y_gradient_derivative = -0.5
 
                     # keep unsimplified to ensure proper computation
-                    top_gradient = 0.5 * (x_gradient ** 2 + y_gradient **2) ** -0.5 * 2 * y_gradient * y_gradient_derivative
+                    top_gradient = 0.5 * (x_gradient ** 2 + y_gradient **2 + 1e-8) ** -0.5 * 2 * y_gradient * y_gradient_derivative
 
                 total_gradient = left_gradient + right_gradient + top_gradient + bottom_gradient
 
@@ -163,9 +189,11 @@ class ImageEvaluator:
 
         self.gradient =  data_fidelity_gradient + penalty_gradient
 
+
+        #pdb.set_trace()
     def step(self):
         
-        new_noisy_img = self.u_image - 0.001 * self.gradient 
+        new_noisy_img = self.u_image - self.learning_rate * self.gradient 
         return new_noisy_img
     @staticmethod
     def squared_l2_norm(image1, image2):
@@ -180,6 +208,10 @@ class ImageEvaluator:
     def calculate_sum_gradients(u_image):
 
         grad_x, grad_y = ImageEvaluator.calculate_gradient(u_image)
+
+        
+        #print(grad_x)    
+
 
         magnitude_gradient = (grad_x ** 2 + grad_y ** 2) ** 0.5
 
@@ -214,39 +246,87 @@ class ImageEvaluator:
 
 
 if __name__ == '__main__': 
-    img = cv2.imread('einstein.jpeg', cv2.IMREAD_GRAYSCALE)
+    img = cv2.imread('Einstein.jpeg', cv2.IMREAD_GRAYSCALE)
 
-    noisy_img = add_gaussian_noise(img, )
+    img = np.array(img)
+    img_original = add_gaussian_noise_normalize(img, sigma = 0)
 
-    original_noisy_img = noisy_img
+    variances = [0.1, 0.01, 0.001]
+    lambdas = [1, 2, 5, 10]
+    learning_rates = [0.01]
+    epochs = [25]
 
-    trainer = ImageEvaluator(noisy_img)
-
-    # similar to neural network, but we are just optimimzing the inputs rather than the parameters that evaluate
-
-    for i in range(0, 1000): 
-        print(trainer.forward(noisy_img)) # when calculating the loss function the values seem to go to 0, what is the problem here? 
-        trainer.backward()
-
-        noisy_img = trainer.step()
-       
+    
+    fig = plt.figure(figsize=(26, 10))
 
 
-    fig, axs = plt.subplots(1, 4, figsize=(18, 6))
+    n_cols = 12
+    # Create GridSpec
+    gs = gridspec.GridSpec(2, 12 + 1, height_ratios=[1, 1], width_ratios=[1.5] + [1]*(13-1))
 
+    # Adjust spacing
+    gs.update(hspace=0.01, wspace=0.01)
+    
+    
+    
+    
     # Display original image
-    axs[0].imshow(img, cmap='gray')
-    axs[0].set_title('Original Image')
-    axs[0].axis('off')
+    ax_orig_top = fig.add_subplot(gs[0, 0])
+    ax_orig_top.imshow(img_original, cmap='gray')
+    ax_orig_top.set_title('Original Image')
+    ax_orig_top.axis('off')
+
+    ax_orig_bottom = fig.add_subplot(gs[1, 0])
+    ax_orig_bottom.imshow(img_original, cmap='gray')
+    ax_orig_bottom.set_title('Original Image')
+    ax_orig_bottom.axis('off')
 
 
-    axs[1].imshow(original_noisy_img, cmap='gray')
-    axs[1].set_title('Noisy Image')
-    axs[1].axis('off')
+    # Define a figure to plot convergence graph
+
+    #fig, ax = plt.subplot(1,1)
+    
+
+    # Process and display other images
+    for i, (epoch, learning_rate, lambda_, variance) in enumerate(product(epochs, learning_rates, lambdas, variances), start=1):
+        print(f"iteration {i}")
+        print((epoch, learning_rate, lambda_, variance))
+        noisy_img = add_gaussian_noise_normalize(img, sigma=variance)
+        original_noisy_img = noisy_img
+
+        trainer = ImageEvaluator(noisy_img, l=lambda_, learning_rate=learning_rate)
 
 
-    axs[2].imshow(noisy_img, cmap='gray')
-    axs[2].set_title('ROF Denoised Image')
-    axs[2].axis('off')
+        convergence = []
 
+        for j in range(0, epoch):
+            convergence.append(trainer.forward(noisy_img))
+            trainer.backward()
+            noisy_img = trainer.step()
+
+        
+
+        ax_top = fig.add_subplot(gs[0, i])
+        ax_top.imshow(original_noisy_img.copy(), cmap='gray', vmin=0, vmax=1)
+        ax_top.set_title('O')
+        ax_top.axis('off')
+
+        ax_bottom = fig.add_subplot(gs[1, i])
+        ax_bottom.imshow(noisy_img.copy(), cmap='gray', vmin=0, vmax=1)
+        ax_bottom.set_title(f'DN\n lr - {learning_rate} \nlambda - {lambda_} \n-variance -{variance}')
+        ax_bottom.axis('off')
+
+        """
+        plt.figure(figsize=(10, 6))
+        plt.plot(list(range(epoch)), convergence, linestyle = '-', marker='o')
+        plt.title(f'E[u] vs Epochs ($\lambda = {lambda_}, lr = 0.01,\sigma = {variance}$)')
+        plt.xlabel('Epochs')
+        plt.ylabel('E[u]')
+        plt.grid(True)
+        plt.tight_layout()
+        plt.show()
+
+        """
+
+    plt.tight_layout()
     plt.show()
